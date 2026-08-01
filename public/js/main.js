@@ -5,10 +5,18 @@ const searchEngines = {
   github: { name: "GitHub", url: "https://github.com/search?q=" },
 };
 
+const SEARCH_HISTORY_KEY = "chisa-nav-search-history-v1";
+const MAX_SEARCH_HISTORY = 40;
+const MAX_SUGGESTIONS = 10;
+const SUGGEST_DEBOUNCE_MS = 180;
+
 const state = {
   settings: {},
   groups: [],
   links: [],
+  suggestions: [],
+  activeSuggestionIndex: -1,
+  suggestionRequestId: 0,
 };
 
 const root = document.documentElement;
@@ -16,7 +24,11 @@ const navigationRoot = document.querySelector("#navigationRoot");
 const searchForm = document.querySelector("#searchForm");
 const searchInput = document.querySelector("#searchInput");
 const searchEngine = document.querySelector("#searchEngine");
+const searchInputWrap = document.querySelector("#searchInputWrap");
+const suggestionList = document.querySelector("#suggestionList");
+const suggestionStatus = document.querySelector("#suggestionStatus");
 const themeButton = document.querySelector("#themeButton");
+let suggestionTimer = null;
 
 function applyTheme(theme) {
   let resolved = theme;
@@ -103,7 +115,7 @@ function renderNavigation() {
       card.target = Number(link.open_in_new_tab) === 1 ? "_blank" : "_self";
       card.rel = "noopener noreferrer";
       card.querySelector(".link-title").textContent = link.title;
-      card.querySelector(".link-description").textContent = link.description || new URL(link.url).hostname;
+      card.querySelector(".link-description").textContent = link.description || safeHostname(link.url);
 
       const icon = card.querySelector(".link-icon");
       const iconWrap = card.querySelector(".link-icon-wrap");
@@ -163,20 +175,319 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function safeHostname(value) {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return String(value || "");
+  }
+}
+
+function normalizeSearchText(value) {
+  return String(value || "").trim().toLocaleLowerCase("zh-CN");
+}
+
+function readSearchHistory() {
+  try {
+    const value = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || "[]");
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((item) => item && typeof item.query === "string")
+      .map((item) => ({
+        query: item.query.trim().slice(0, 200),
+        count: Math.max(1, Number(item.count) || 1),
+        lastUsed: Number(item.lastUsed) || 0,
+      }))
+      .filter((item) => item.query);
+  } catch {
+    return [];
+  }
+}
+
+function rememberSearch(query) {
+  const cleaned = String(query || "").trim().slice(0, 200);
+  if (!cleaned) return;
+  const history = readSearchHistory();
+  const key = normalizeSearchText(cleaned);
+  const existing = history.find((item) => normalizeSearchText(item.query) === key);
+  if (existing) {
+    existing.query = cleaned;
+    existing.count += 1;
+    existing.lastUsed = Date.now();
+  } else {
+    history.push({ query: cleaned, count: 1, lastUsed: Date.now() });
+  }
+  history.sort((a, b) => b.lastUsed - a.lastUsed || b.count - a.count);
+  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, MAX_SEARCH_HISTORY)));
+}
+
+function localLinkSuggestions(query) {
+  const normalized = normalizeSearchText(query);
+  if (!normalized) return [];
+
+  return state.links
+    .map((link) => {
+      const title = normalizeSearchText(link.title);
+      const description = normalizeSearchText(link.description);
+      const hostname = normalizeSearchText(safeHostname(link.url));
+      const fullUrl = normalizeSearchText(link.url);
+      let score = Number.POSITIVE_INFINITY;
+
+      if (title === normalized) score = 0;
+      else if (title.startsWith(normalized)) score = 5;
+      else if (hostname.startsWith(normalized)) score = 9;
+      else if (title.includes(normalized)) score = 13;
+      else if (hostname.includes(normalized)) score = 17;
+      else if (description.includes(normalized)) score = 22;
+      else if (fullUrl.includes(normalized)) score = 26;
+
+      return { link, score };
+    })
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => a.score - b.score || Number(a.link.sort_order || 0) - Number(b.link.sort_order || 0))
+    .slice(0, 6)
+    .map(({ link }) => ({
+      type: "link",
+      text: link.title,
+      detail: safeHostname(link.url),
+      url: link.url,
+      iconUrl: faviconFor(link),
+      openInNewTab: Number(link.open_in_new_tab) === 1,
+    }));
+}
+
+function historySuggestions(query) {
+  const normalized = normalizeSearchText(query);
+  if (!normalized) return [];
+
+  return readSearchHistory()
+    .map((item) => {
+      const value = normalizeSearchText(item.query);
+      let score = Number.POSITIVE_INFINITY;
+      if (value === normalized) score = 0;
+      else if (value.startsWith(normalized)) score = 5;
+      else if (value.includes(normalized)) score = 15;
+      return { ...item, score };
+    })
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => a.score - b.score || b.count - a.count || b.lastUsed - a.lastUsed)
+    .slice(0, 6)
+    .map((item) => ({ type: "history", text: item.query, detail: "搜索历史" }));
+}
+
+function mergeSuggestions(...groups) {
+  const seen = new Set();
+  const merged = [];
+
+  for (const group of groups) {
+    for (const item of group) {
+      const primaryKey = normalizeSearchText(item.type === "link" ? `link:${item.url}` : `query:${item.text}`);
+      const textKey = normalizeSearchText(`query:${item.text}`);
+      if (!primaryKey || seen.has(primaryKey) || seen.has(textKey)) continue;
+      seen.add(primaryKey);
+      seen.add(textKey);
+      merged.push(item);
+      if (merged.length >= MAX_SUGGESTIONS) return merged;
+    }
+  }
+  return merged;
+}
+
+function suggestionIcon(item) {
+  if (item.type === "link") return "↗";
+  if (item.type === "history") return "↶";
+  return "⌕";
+}
+
+function renderSuggestions(items) {
+  state.suggestions = items.slice(0, MAX_SUGGESTIONS);
+  state.activeSuggestionIndex = -1;
+  suggestionList.innerHTML = "";
+
+  if (!state.suggestions.length || !searchInput.value.trim()) {
+    closeSuggestions();
+    return;
+  }
+
+  state.suggestions.forEach((item, index) => {
+    const option = document.createElement("li");
+    option.id = `search-suggestion-${index}`;
+    option.className = "suggestion-item";
+    option.dataset.index = String(index);
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", "false");
+
+    const iconWrap = document.createElement("span");
+    iconWrap.className = "suggestion-icon";
+    if (item.type === "link" && item.iconUrl) {
+      const image = document.createElement("img");
+      image.src = item.iconUrl;
+      image.alt = "";
+      image.addEventListener("error", () => {
+        image.remove();
+        iconWrap.textContent = suggestionIcon(item);
+      }, { once: true });
+      iconWrap.append(image);
+    } else {
+      iconWrap.textContent = suggestionIcon(item);
+    }
+
+    const copy = document.createElement("span");
+    copy.className = "suggestion-copy";
+    const text = document.createElement("span");
+    text.className = "suggestion-text";
+    text.textContent = item.text;
+    const detail = document.createElement("span");
+    detail.className = "suggestion-detail";
+    detail.textContent = item.type === "link" ? `快捷入口 · ${item.detail || ""}` : item.detail || "搜索建议";
+    copy.append(text, detail);
+
+    const action = document.createElement("span");
+    action.className = "suggestion-action";
+    action.textContent = item.type === "link" ? "打开" : searchEngines[searchEngine.value]?.name || "搜索";
+
+    option.append(iconWrap, copy, action);
+    option.addEventListener("pointerdown", (event) => event.preventDefault());
+    option.addEventListener("click", () => activateSuggestion(index));
+    option.addEventListener("mousemove", () => setActiveSuggestion(index));
+    suggestionList.append(option);
+  });
+
+  suggestionList.hidden = false;
+  searchInput.setAttribute("aria-expanded", "true");
+  suggestionStatus.textContent = `找到 ${state.suggestions.length} 条建议`;
+}
+
+function setActiveSuggestion(index) {
+  if (!state.suggestions.length) return;
+  const nextIndex = (index + state.suggestions.length) % state.suggestions.length;
+  state.activeSuggestionIndex = nextIndex;
+  const options = suggestionList.querySelectorAll(".suggestion-item");
+  options.forEach((option, optionIndex) => {
+    const active = optionIndex === nextIndex;
+    option.classList.toggle("is-active", active);
+    option.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  searchInput.setAttribute("aria-activedescendant", `search-suggestion-${nextIndex}`);
+  options[nextIndex]?.scrollIntoView({ block: "nearest" });
+}
+
+function closeSuggestions() {
+  suggestionList.hidden = true;
+  suggestionList.innerHTML = "";
+  state.suggestions = [];
+  state.activeSuggestionIndex = -1;
+  searchInput.setAttribute("aria-expanded", "false");
+  searchInput.removeAttribute("aria-activedescendant");
+  suggestionStatus.textContent = "";
+}
+
+function performSearch(query) {
+  const cleaned = String(query || "").trim();
+  if (!cleaned) return searchInput.focus();
+  rememberSearch(cleaned);
+  closeSuggestions();
+  const engine = searchEngines[searchEngine.value] || searchEngines.google;
+  window.location.href = engine.url + encodeURIComponent(cleaned);
+}
+
+function activateSuggestion(index) {
+  const item = state.suggestions[index];
+  if (!item) return;
+
+  if (item.type === "link" && item.url) {
+    closeSuggestions();
+    if (item.openInNewTab) {
+      window.open(item.url, "_blank", "noopener,noreferrer");
+      searchInput.select();
+    } else {
+      window.location.href = item.url;
+    }
+    return;
+  }
+
+  searchInput.value = item.text;
+  performSearch(item.text);
+}
+
+async function fetchOnlineSuggestions(query, requestId) {
+  try {
+    const params = new URLSearchParams({ q: query, engine: searchEngine.value });
+    const response = await fetch(`/api/suggest?${params}`, {
+      headers: { Accept: "application/json" },
+    });
+    const data = await response.json();
+    if (requestId !== state.suggestionRequestId) return [];
+    if (!response.ok || !data.ok || !Array.isArray(data.suggestions)) return [];
+    return data.suggestions
+      .filter((item) => typeof item === "string" && item.trim())
+      .slice(0, MAX_SUGGESTIONS)
+      .map((text) => ({ type: "online", text: text.trim(), detail: "热门联想" }));
+  } catch {
+    return [];
+  }
+}
+
+async function updateSuggestions() {
+  const query = searchInput.value.trim();
+  const requestId = ++state.suggestionRequestId;
+  if (!query) {
+    closeSuggestions();
+    return;
+  }
+
+  const links = localLinkSuggestions(query);
+  const history = historySuggestions(query);
+  renderSuggestions(mergeSuggestions(links, history));
+
+  const online = await fetchOnlineSuggestions(query, requestId);
+  if (requestId !== state.suggestionRequestId || searchInput.value.trim() !== query) return;
+  renderSuggestions(mergeSuggestions(links, history, online));
+}
+
+function scheduleSuggestions() {
+  window.clearTimeout(suggestionTimer);
+  suggestionTimer = window.setTimeout(updateSuggestions, SUGGEST_DEBOUNCE_MS);
+}
+
 searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const query = searchInput.value.trim();
-  if (!query) return searchInput.focus();
-  const engine = searchEngines[searchEngine.value] || searchEngines.google;
-  window.location.href = engine.url + encodeURIComponent(query);
+  if (state.activeSuggestionIndex >= 0) {
+    activateSuggestion(state.activeSuggestionIndex);
+    return;
+  }
+  performSearch(searchInput.value);
+});
+
+searchInput.addEventListener("input", scheduleSuggestions);
+searchInput.addEventListener("focus", () => {
+  if (searchInput.value.trim()) scheduleSuggestions();
+});
+searchInput.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown") {
+    if (!state.suggestions.length) return;
+    event.preventDefault();
+    setActiveSuggestion(state.activeSuggestionIndex + 1);
+  } else if (event.key === "ArrowUp") {
+    if (!state.suggestions.length) return;
+    event.preventDefault();
+    setActiveSuggestion(state.activeSuggestionIndex <= 0 ? state.suggestions.length - 1 : state.activeSuggestionIndex - 1);
+  } else if (event.key === "Escape") {
+    closeSuggestions();
+  }
 });
 
 searchEngine.addEventListener("change", () => {
   localStorage.setItem("chisa-nav-search-engine", searchEngine.value);
   searchInput.focus();
+  if (searchInput.value.trim()) scheduleSuggestions();
 });
 
 themeButton.addEventListener("click", cycleTheme);
+
+document.addEventListener("pointerdown", (event) => {
+  if (!searchInputWrap.contains(event.target) && event.target !== searchEngine) closeSuggestions();
+});
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {

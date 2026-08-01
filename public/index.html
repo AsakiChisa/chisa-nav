@@ -31,7 +31,20 @@
           <option value="baidu">百度</option>
           <option value="github">GitHub</option>
         </select>
-        <input id="searchInput" type="search" placeholder="搜索网页，按 / 快速聚焦" aria-label="搜索内容">
+        <div class="search-input-wrap" id="searchInputWrap">
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="搜索网页，按 / 快速聚焦"
+            aria-label="搜索内容"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            aria-controls="suggestionList"
+          >
+          <ul id="suggestionList" class="suggestion-list" role="listbox" hidden></ul>
+          <span id="suggestionStatus" class="sr-only" aria-live="polite"></span>
+        </div>
         <button type="submit">搜索</button>
       </form>
     </section>

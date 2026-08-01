@@ -40,7 +40,9 @@ export default {
     }
 
     try {
-      await cleanupExpiredSessions(env.DB);
+      if (url.pathname.startsWith("/api/admin/")) {
+        await cleanupExpiredSessions(env.DB);
+      }
       return await routeApi(request, env, url);
     } catch (error) {
       if (error instanceof HttpError) {
@@ -62,6 +64,10 @@ async function routeApi(request: Request, env: Env, url: URL): Promise<Response>
 
   if (method === "GET" && path === "/api/navigation") {
     return getNavigation(env.DB);
+  }
+
+  if (method === "GET" && path === "/api/suggest") {
+    return getSearchSuggestions(url);
   }
 
   if (method === "GET" && path === "/api/admin/setup-status") {
@@ -183,6 +189,124 @@ async function getNavigation(db: D1Database): Promise<Response> {
     groups: groupsResult.results,
     links: linksResult.results,
   });
+}
+
+
+type SuggestionProvider = "google" | "bing" | "baidu" | "duckduckgo";
+
+async function getSearchSuggestions(url: URL): Promise<Response> {
+  const query = String(url.searchParams.get("q") ?? "").trim().slice(0, 100);
+  const engine = String(url.searchParams.get("engine") ?? "google").toLowerCase();
+  if (!query) {
+    return cachedJson({ ok: true, suggestions: [] }, 60);
+  }
+
+  const providerOrder: SuggestionProvider[] = engine === "bing"
+    ? ["bing", "google", "duckduckgo"]
+    : engine === "baidu"
+      ? ["baidu", "google", "duckduckgo"]
+      : ["google", "duckduckgo"];
+
+  for (const provider of providerOrder) {
+    const suggestions = await fetchSuggestionProvider(provider, query);
+    if (suggestions.length) {
+      return cachedJson({ ok: true, suggestions, provider }, 300);
+    }
+  }
+
+  // 联想服务临时不可用时返回空列表，前端仍会显示导航入口和本地搜索历史。
+  return cachedJson({ ok: true, suggestions: [], provider: null }, 60);
+}
+
+async function fetchSuggestionProvider(provider: SuggestionProvider, query: string): Promise<string[]> {
+  const endpoint = suggestionEndpoint(provider, query);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2_800);
+
+  try {
+    const response = await fetch(endpoint, {
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json,text/plain,*/*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.7",
+        "User-Agent": "Mozilla/5.0 (compatible; ChisaNav/1.0)",
+      },
+    });
+    if (!response.ok) return [];
+
+    const text = await response.text();
+    return parseSuggestionResponse(provider, text, query);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function suggestionEndpoint(provider: SuggestionProvider, query: string): string {
+  const encoded = encodeURIComponent(query);
+  switch (provider) {
+    case "bing":
+      return `https://api.bing.com/osjson.aspx?query=${encoded}&market=zh-CN`;
+    case "baidu":
+      return `https://suggestion.baidu.com/su?wd=${encoded}&action=opensearch&ie=UTF-8`;
+    case "duckduckgo":
+      return `https://duckduckgo.com/ac/?q=${encoded}&type=list`;
+    default:
+      return `https://suggestqueries.google.com/complete/search?client=firefox&hl=zh-CN&q=${encoded}`;
+  }
+}
+
+function parseSuggestionResponse(provider: SuggestionProvider, text: string, query: string): string[] {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    let values: unknown[] = [];
+
+    if (provider === "duckduckgo" && Array.isArray(parsed)) {
+      values = parsed.map((item) => {
+        if (item && typeof item === "object" && "phrase" in item) {
+          return (item as { phrase?: unknown }).phrase;
+        }
+        return "";
+      });
+    } else if (Array.isArray(parsed) && Array.isArray(parsed[1])) {
+      values = parsed[1];
+    }
+
+    return sanitizeSuggestions(values, query);
+  } catch {
+    // 某些百度节点可能返回 JSONP；只提取回调括号中的 JSON 数组。
+    const start = text.indexOf("(");
+    const end = text.lastIndexOf(")");
+    if (start >= 0 && end > start) {
+      try {
+        const parsed = JSON.parse(text.slice(start + 1, end)) as unknown;
+        if (Array.isArray(parsed) && Array.isArray(parsed[1])) {
+          return sanitizeSuggestions(parsed[1], query);
+        }
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+}
+
+function sanitizeSuggestions(values: unknown[], query: string): string[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const suggestion = value.trim().replace(/\s+/g, " ").slice(0, 200);
+    const key = suggestion.toLocaleLowerCase("zh-CN");
+    if (!suggestion || key === normalizedQuery || seen.has(key)) continue;
+    seen.add(key);
+    result.push(suggestion);
+    if (result.length >= 10) break;
+  }
+  return result;
 }
 
 async function setupAdmin(request: Request, env: Env): Promise<Response> {
@@ -955,6 +1079,18 @@ function safeEqual(a: string, b: string): boolean {
     diff |= (aa[i] ?? 0) ^ (bb[i] ?? 0);
   }
   return diff === 0;
+}
+
+function cachedJson(data: unknown, maxAge: number): Response {
+  return new Response(JSON.stringify(data), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": `public, max-age=${Math.min(maxAge, 60)}, s-maxage=${maxAge}`,
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "same-origin",
+    },
+  });
 }
 
 function json(data: unknown, status = 200): Response {

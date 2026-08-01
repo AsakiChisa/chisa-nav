@@ -1,0 +1,3 @@
+# 复制本文件为 .dev.vars，并换成你自己生成的随机值。
+SESSION_SECRET=这里填写至少64位随机字符串
+BOOTSTRAP_TOKEN=这里填写首次创建管理员时使用的初始化令牌

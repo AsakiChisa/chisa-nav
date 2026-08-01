@@ -1,32 +1,65 @@
 <!doctype html>
-<html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Hello, World!</title>
-	</head>
-	<body>
-		<h1 id="heading"></h1>
-		<p>This page comes from a static asset stored at `public/index.html` as configured in `wrangler.jsonc`.</p>
-		<button id="button" type="button">Fetch a random UUID</button>
-		<output id="random" for="button"></output>
-		<script>
-			fetch('/message')
-				.then((resp) => resp.text())
-				.then((text) => {
-					const h1 = document.getElementById('heading');
-					h1.textContent = text;
-				});
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fff7fb">
+  <meta name="description" content="浅咲的浏览器快速导航主页">
+  <title>浅咲导航</title>
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+  <div class="background-layer" aria-hidden="true"></div>
+  <main class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow" id="dateText">正在读取日期</p>
+        <h1 id="greetingText">你好，浅咲</h1>
+        <p class="subtitle" id="siteSubtitle">收藏常用网站，快速抵达</p>
+      </div>
+      <div class="clock-wrap" aria-label="当前时间">
+        <div class="clock" id="clockText">--:--</div>
+        <button class="icon-button" id="themeButton" type="button" aria-label="切换主题" title="切换主题">◐</button>
+      </div>
+    </header>
 
-			const button = document.getElementById("button");
-			button.addEventListener("click", () => {
-				fetch('/random')
-					.then((resp) => resp.text())
-					.then((text) => {
-						const random = document.getElementById('random');
-						random.textContent = text;
-					});
-			});
-		</script>
-	</body>
+    <section class="search-panel" aria-label="网页搜索">
+      <form id="searchForm" autocomplete="off">
+        <select id="searchEngine" aria-label="搜索引擎">
+          <option value="google">Google</option>
+          <option value="bing">Bing</option>
+          <option value="baidu">百度</option>
+          <option value="github">GitHub</option>
+        </select>
+        <input id="searchInput" type="search" placeholder="搜索网页，按 / 快速聚焦" aria-label="搜索内容">
+        <button type="submit">搜索</button>
+      </form>
+    </section>
+
+    <section id="navigationRoot" class="navigation-root" aria-live="polite">
+      <div class="loading-card">正在加载导航内容…</div>
+    </section>
+
+    <footer>
+      <span id="siteTitleFooter">浅咲导航</span>
+      <a href="/admin/" rel="nofollow">管理后台</a>
+    </footer>
+  </main>
+
+  <template id="linkCardTemplate">
+    <a class="link-card">
+      <span class="link-icon-wrap">
+        <img class="link-icon" alt="" loading="lazy">
+        <span class="link-icon-fallback"></span>
+      </span>
+      <span class="link-copy">
+        <strong class="link-title"></strong>
+        <small class="link-description"></small>
+      </span>
+      <span class="link-arrow" aria-hidden="true">↗</span>
+    </a>
+  </template>
+
+  <script src="/js/main.js" defer></script>
+</body>
 </html>

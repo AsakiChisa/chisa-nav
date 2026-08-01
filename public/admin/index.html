@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fff7fb">
+  <meta name="robots" content="noindex,nofollow">
+  <title>浅咲导航 · 管理后台</title>
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+
+  <main id="authView" class="auth-shell">
+    <section class="auth-card">
+      <a class="back-link" href="/">← 返回导航首页</a>
+      <div class="brand-mark">咲</div>
+      <h1 id="authTitle">管理后台</h1>
+      <p id="authDescription">登录后管理分组、网址和首页外观。</p>
+
+      <form id="authForm">
+        <label>
+          <span>管理员用户名</span>
+          <input id="authUsername" name="username" autocomplete="username" required maxlength="32">
+        </label>
+        <label>
+          <span>管理员密码</span>
+          <input id="authPassword" name="password" type="password" autocomplete="current-password" required maxlength="128">
+        </label>
+        <label id="bootstrapField" hidden>
+          <span>初始化令牌</span>
+          <input id="bootstrapToken" name="bootstrapToken" type="password" autocomplete="off" maxlength="256">
+          <small>填写本地 .dev.vars 或 Cloudflare Secret 中的 BOOTSTRAP_TOKEN。</small>
+        </label>
+        <button class="primary-button" id="authSubmit" type="submit">登录</button>
+      </form>
+      <p class="auth-hint" id="authHint"></p>
+    </section>
+  </main>
+
+  <div id="dashboardView" class="dashboard" hidden>
+    <aside class="sidebar">
+      <a class="sidebar-brand" href="/">
+        <span class="brand-mark small">咲</span>
+        <span><strong>浅咲导航</strong><small>管理后台</small></span>
+      </a>
+      <nav id="sidebarNav">
+        <button class="nav-item active" data-page="overview">概览</button>
+        <button class="nav-item" data-page="groups">分组管理</button>
+        <button class="nav-item" data-page="links">网址管理</button>
+        <button class="nav-item" data-page="appearance">外观设置</button>
+        <button class="nav-item" data-page="security">安全设置</button>
+        <button class="nav-item" data-page="logs">操作日志</button>
+        <button class="nav-item" data-page="backup">备份恢复</button>
+      </nav>
+      <div class="sidebar-footer">
+        <span id="currentUser">管理员</span>
+        <button id="logoutButton" type="button">退出登录</button>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <button id="mobileMenuButton" class="mobile-menu-button" type="button" aria-label="打开菜单">☰</button>
+        <div>
+          <h1 id="pageTitle">概览</h1>
+          <p id="pageSubtitle">管理你的浏览器快速导航主页</p>
+        </div>
+        <a class="preview-button" href="/" target="_blank" rel="noopener">预览首页 ↗</a>
+      </header>
+
+      <section class="page active" data-page-panel="overview">
+        <div class="stat-grid">
+          <article class="stat-card"><span>分组数量</span><strong id="statGroups">0</strong></article>
+          <article class="stat-card"><span>网址数量</span><strong id="statLinks">0</strong></article>
+          <article class="stat-card"><span>已显示入口</span><strong id="statVisible">0</strong></article>
+          <article class="stat-card"><span>当前管理员</span><strong id="statUser">-</strong></article>
+        </div>
+        <div class="panel welcome-panel">
+          <div>
+            <p class="panel-kicker">QUICK START</p>
+            <h2>从添加第一个网址开始</h2>
+            <p>先在“分组管理”中整理分类，再到“网址管理”添加快捷入口。修改后刷新首页即可看到结果。</p>
+          </div>
+          <button class="primary-button compact" data-go-page="links">新增网址</button>
+        </div>
+      </section>
+
+      <section class="page" data-page-panel="groups">
+        <div class="section-toolbar">
+          <div><h2>分组管理</h2><p>拖动左侧手柄调整顺序，删除分组会同时删除其中的网址。</p></div>
+          <button class="primary-button compact" id="addGroupButton">＋ 新增分组</button>
+        </div>
+        <div class="panel table-panel">
+          <div id="groupsList" class="sortable-list"></div>
+        </div>
+      </section>
+
+      <section class="page" data-page-panel="links">
+        <div class="section-toolbar">
+          <div><h2>网址管理</h2><p>可以按分组筛选、编辑入口，并拖动同一分组内的网址调整顺序。</p></div>
+          <button class="primary-button compact" id="addLinkButton">＋ 新增网址</button>
+        </div>
+        <div class="filter-row">
+          <select id="linkGroupFilter"><option value="all">全部分组</option></select>
+          <input id="linkSearch" type="search" placeholder="搜索名称或网址">
+        </div>
+        <div id="linksContainer"></div>
+      </section>
+
+      <section class="page" data-page-panel="appearance">
+        <div class="section-toolbar"><div><h2>外观设置</h2><p>设置导航标题、问候语、背景和玻璃卡片效果。</p></div></div>
+        <form id="settingsForm" class="panel form-grid two-columns">
+          <label><span>网站标题</span><input name="site_title" maxlength="100"></label>
+          <label><span>问候名称</span><input name="greeting_name" maxlength="100"></label>
+          <label class="full"><span>副标题</span><input name="site_subtitle" maxlength="100"></label>
+          <label class="full"><span>背景图片 URL</span><input name="background_url" type="url" placeholder="https://..."><small>留空则使用默认浅粉渐变背景。</small></label>
+          <label><span>默认搜索引擎</span><select name="default_search_engine"><option value="google">Google</option><option value="bing">Bing</option><option value="baidu">百度</option><option value="github">GitHub</option></select></label>
+          <label><span>默认主题</span><select name="default_theme"><option value="auto">跟随系统</option><option value="light">日间</option><option value="dark">夜间</option></select></label>
+          <label><span>卡片透明度 <b id="opacityValue">0.78</b></span><input name="card_opacity" type="range" min="0.2" max="1" step="0.01"></label>
+          <label><span>背景模糊 <b id="blurValue">18px</b></span><input name="card_blur" type="range" min="0" max="40" step="1"></label>
+          <div class="form-actions full"><button class="primary-button compact" type="submit">保存外观设置</button></div>
+        </form>
+      </section>
+
+      <section class="page" data-page-panel="security">
+        <div class="section-toolbar"><div><h2>安全设置</h2><p>连续输错三次会封禁 IP 30 分钟；白名单 IP 不触发封禁。</p></div></div>
+        <div class="security-grid">
+          <div class="panel">
+            <div class="panel-heading"><h3>IP 白名单</h3><button class="secondary-button compact" id="addWhitelistButton">＋ 添加</button></div>
+            <div id="whitelistList" class="simple-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-heading"><h3>当前封禁</h3><button class="secondary-button compact" id="refreshBlockedButton">刷新</button></div>
+            <div id="blockedList" class="simple-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" data-page-panel="logs">
+        <div class="section-toolbar"><div><h2>操作日志</h2><p>显示最近 200 条后台操作记录。</p></div><button class="secondary-button compact" id="refreshLogsButton">刷新</button></div>
+        <div class="panel table-panel"><div id="logsList" class="log-list"></div></div>
+      </section>
+
+      <section class="page" data-page-panel="backup">
+        <div class="section-toolbar"><div><h2>备份与恢复</h2><p>导出内容只包含分组、网址和外观设置，不包含管理员密码和会话。</p></div></div>
+        <div class="backup-grid">
+          <article class="panel action-panel"><h3>导出 JSON 备份</h3><p>下载当前导航配置，建议每次大改之前保存一份。</p><button class="primary-button compact" id="exportButton">下载备份</button></article>
+          <article class="panel action-panel danger-zone"><h3>导入 JSON 备份</h3><p>导入会替换现有分组、网址和设置，请先导出当前数据。</p><input id="importFile" type="file" accept="application/json,.json"><button class="danger-button compact" id="importButton">导入并替换</button></article>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <dialog id="groupDialog" class="modal">
+    <form id="groupForm" method="dialog">
+      <div class="modal-heading"><div><p>GROUP</p><h2 id="groupDialogTitle">新增分组</h2></div><button class="close-button" value="cancel" aria-label="关闭">×</button></div>
+      <input name="id" type="hidden">
+      <label><span>分组名称</span><input name="name" required maxlength="50"></label>
+      <label><span>分组说明</span><textarea name="description" maxlength="200" rows="3"></textarea></label>
+      <label><span>图标标识</span><input name="icon" maxlength="100" placeholder="例如 star、server"></label>
+      <label class="checkbox-label"><input name="isVisible" type="checkbox" checked><span>在导航首页显示</span></label>
+      <div class="modal-actions"><button class="secondary-button" value="cancel">取消</button><button class="primary-button" id="saveGroupButton" type="submit" value="default">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="linkDialog" class="modal wide">
+    <form id="linkForm" method="dialog">
+      <div class="modal-heading"><div><p>LINK</p><h2 id="linkDialogTitle">新增网址</h2></div><button class="close-button" value="cancel" aria-label="关闭">×</button></div>
+      <input name="id" type="hidden">
+      <div class="form-grid two-columns modal-grid">
+        <label><span>网站名称</span><input name="title" required maxlength="80"></label>
+        <label><span>所属分组</span><select name="groupId" required></select></label>
+        <label class="full"><span>网站地址</span><input name="url" type="url" required placeholder="https://..."></label>
+        <label class="full"><span>说明文字</span><textarea name="description" maxlength="300" rows="3"></textarea></label>
+        <label class="full"><span>自定义图标 URL</span><input name="iconUrl" type="url" placeholder="留空时自动读取网站 favicon"></label>
+        <label class="checkbox-label"><input name="openInNewTab" type="checkbox" checked><span>在新标签页打开</span></label>
+        <label class="checkbox-label"><input name="isVisible" type="checkbox" checked><span>在导航首页显示</span></label>
+      </div>
+      <div class="modal-actions"><button class="secondary-button" value="cancel">取消</button><button class="primary-button" type="submit" value="default">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="whitelistDialog" class="modal">
+    <form id="whitelistForm" method="dialog">
+      <div class="modal-heading"><div><p>SECURITY</p><h2>添加 IP 白名单</h2></div><button class="close-button" value="cancel" aria-label="关闭">×</button></div>
+      <label><span>IP 地址</span><input name="ipAddress" required maxlength="100" placeholder="例如 203.0.113.10"></label>
+      <label><span>备注</span><input name="note" maxlength="200" placeholder="例如 家里电脑"></label>
+      <div class="modal-actions"><button class="secondary-button" value="cancel">取消</button><button class="primary-button" type="submit" value="default">添加</button></div>
+    </form>
+  </dialog>
+
+  <script src="/js/admin.js" defer></script>
+</body>
+</html>

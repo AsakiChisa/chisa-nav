@@ -178,8 +178,12 @@ async function getNavigation(db: D1Database): Promise<Response> {
       "SELECT id, name, description, icon, sort_order FROM groups WHERE is_visible = 1 ORDER BY sort_order, id",
     ),
     db.prepare(
-      `SELECT id, group_id, title, url, description, icon_url, open_in_new_tab, sort_order
-       FROM links WHERE is_visible = 1 ORDER BY group_id, sort_order, id`,
+      `SELECT links.id, links.group_id, links.title, links.url, links.description, links.icon_url,
+              links.open_in_new_tab, links.sort_order
+       FROM links
+       JOIN groups ON groups.id = links.group_id
+       WHERE links.is_visible = 1 AND groups.is_visible = 1
+       ORDER BY groups.sort_order, links.sort_order, links.id`,
     ),
   ]);
 

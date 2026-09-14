@@ -429,3 +429,218 @@ footer a:hover { color: var(--accent-strong); }
     display: none;
   }
 }
+
+/* ===== iori-nav 风格的分类导航布局 ===== */
+.search-panel,
+.category-bar,
+.navigation-root {
+  width: min(960px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.category-bar {
+  position: relative;
+  z-index: 2;
+  margin-top: 22px;
+  padding: 2px 0 4px;
+}
+
+.category-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 4px 8px;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.category-tabs::-webkit-scrollbar { display: none; }
+
+.category-tab {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 66px;
+  padding: 11px 13px 13px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color .18s ease, background .18s ease, transform .18s ease;
+}
+
+.category-tab:hover {
+  color: var(--ink);
+  background: rgba(var(--card-rgb), .36);
+  transform: translateY(-1px);
+}
+
+.category-tab > span {
+  font-weight: 650;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.category-tab > small {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: 99px;
+  color: var(--muted);
+  font-size: 10px;
+  background: rgba(127, 92, 119, .08);
+}
+
+.category-tab::after {
+  content: "";
+  position: absolute;
+  left: 20%;
+  right: 20%;
+  bottom: 3px;
+  height: 3px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  opacity: 0;
+  transform: scaleX(.4);
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.category-tab.is-active {
+  color: var(--accent-strong);
+  background: rgba(236, 126, 172, .07);
+}
+
+.category-tab.is-active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.navigation-root {
+  margin-top: 22px;
+}
+
+.category-stage {
+  min-height: 120px;
+}
+
+/* 分类已经由上面的 Tab 表达，这里不重复显示大标题。 */
+.category-meta {
+  display: none;
+}
+
+.category-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.category-grid .link-card {
+  position: relative;
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 14px 14px;
+  text-align: center;
+  border-radius: 18px;
+}
+
+.category-grid .link-icon-wrap {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  border-radius: 14px;
+}
+
+.category-grid .link-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.category-grid .link-copy {
+  width: 100%;
+  min-width: 0;
+}
+
+.category-grid .link-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.category-grid .link-description {
+  display: none;
+}
+
+.category-grid .link-group-tag {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 5px auto 0;
+  padding: 2px 7px;
+  overflow: hidden;
+  border-radius: 99px;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(127, 92, 119, .07);
+}
+
+.category-grid .link-group-tag[hidden] {
+  display: none;
+}
+
+.category-grid .link-arrow {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  opacity: 0;
+  transform: translate(-3px, 3px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.category-grid .link-card:hover .link-arrow {
+  opacity: .75;
+  transform: translate(0, 0);
+}
+
+@media (max-width: 940px) {
+  .category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .category-tabs {
+    justify-content: flex-start;
+    margin: 0 -4px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .category-tab {
+    min-width: auto;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .category-tab > small { display: none; }
+  .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .category-grid .link-card { min-height: 100px; padding: 14px 10px 12px; }
+  .category-grid .link-icon-wrap { width: 42px; height: 42px; }
+  .category-grid .link-icon { width: 27px; height: 27px; }
+  .category-grid .link-arrow { display: none; }
+}
+
+@media (max-width: 450px) {
+  .category-bar { margin-top: 16px; }
+  .navigation-root { margin-top: 16px; }
+  .category-tab > span { font-size: 13px; }
+  .category-grid .link-card { min-height: 94px; }
+  .category-grid .link-group-tag { font-size: 9px; }
+}

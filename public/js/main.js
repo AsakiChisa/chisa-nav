@@ -17,10 +17,13 @@ const state = {
   suggestions: [],
   activeSuggestionIndex: -1,
   suggestionRequestId: 0,
+  activeCategory: localStorage.getItem("chisa-nav-active-category") || "all",
 };
 
 const root = document.documentElement;
 const navigationRoot = document.querySelector("#navigationRoot");
+const categoryBar = document.querySelector("#categoryBar");
+const categoryTabs = document.querySelector("#categoryTabs");
 const searchForm = document.querySelector("#searchForm");
 const searchInput = document.querySelector("#searchInput");
 const searchEngine = document.querySelector("#searchEngine");
@@ -74,65 +77,145 @@ function faviconFor(link) {
   }
 }
 
+function visibleGroupsWithLinks() {
+  return state.groups.filter((group) =>
+    state.links.some((link) => Number(link.group_id) === Number(group.id)),
+  );
+}
+
+function categoryKey(groupId) {
+  return `group:${Number(groupId)}`;
+}
+
+function displayGroupName(group) {
+  const name = String(group?.name || "").trim();
+  if (["常用网站", "常用网址", "常用链接"].includes(name)) return "常用";
+  return name || "未命名";
+}
+
+function resolveActiveCategory(groups) {
+  const valid = new Set(["all", ...groups.map((group) => categoryKey(group.id))]);
+  if (!valid.has(state.activeCategory)) state.activeCategory = "all";
+}
+
+function renderCategoryTabs() {
+  const groups = visibleGroupsWithLinks();
+  resolveActiveCategory(groups);
+  categoryTabs.innerHTML = "";
+
+  if (!groups.length) {
+    categoryBar.hidden = true;
+    return;
+  }
+
+  const items = [
+    { key: "all", label: "全部", count: state.links.length },
+    ...groups.map((group) => ({
+      key: categoryKey(group.id),
+      label: displayGroupName(group),
+      count: state.links.filter((link) => Number(link.group_id) === Number(group.id)).length,
+    })),
+  ];
+
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "category-tab";
+    button.dataset.category = item.key;
+    button.setAttribute("role", "tab");
+    const active = item.key === state.activeCategory;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+    button.innerHTML = `<span>${escapeHtml(item.label)}</span><small>${item.count}</small>`;
+    button.addEventListener("click", () => {
+      state.activeCategory = item.key;
+      localStorage.setItem("chisa-nav-active-category", item.key);
+      renderCategoryTabs();
+      renderNavigation();
+      categoryTabs.querySelector(".category-tab.is-active")?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    });
+    categoryTabs.append(button);
+  }
+
+  categoryBar.hidden = false;
+}
+
 function renderNavigation() {
   navigationRoot.innerHTML = "";
-  const visibleGroups = state.groups.filter((group) => state.links.some((link) => Number(link.group_id) === Number(group.id)));
+  const groups = visibleGroupsWithLinks();
 
-  if (!visibleGroups.length) {
+  if (!groups.length) {
+    categoryBar.hidden = true;
     navigationRoot.innerHTML = '<div class="empty-state">还没有导航入口，请前往管理后台添加。</div>';
     return;
   }
 
+  resolveActiveCategory(groups);
+  const groupMap = new Map(groups.map((group) => [Number(group.id), group]));
+  const selectedGroupId = state.activeCategory.startsWith("group:")
+    ? Number(state.activeCategory.split(":")[1])
+    : null;
+  const links = selectedGroupId
+    ? state.links.filter((link) => Number(link.group_id) === selectedGroupId)
+    : state.links.filter((link) => groupMap.has(Number(link.group_id)));
+
+  const stage = document.createElement("div");
+  stage.className = "category-stage";
+
+  const meta = document.createElement("div");
+  meta.className = "category-meta";
+  if (selectedGroupId) {
+    const group = groupMap.get(selectedGroupId);
+    const title = document.createElement("strong");
+    title.textContent = displayGroupName(group);
+    const detail = document.createElement("span");
+    detail.textContent = group?.description || `${links.length} 个入口`;
+    meta.append(title, detail);
+  } else {
+    const title = document.createElement("strong");
+    title.textContent = "全部";
+    const detail = document.createElement("span");
+    detail.textContent = `${links.length} 个入口`;
+    meta.append(title, detail);
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "link-grid category-grid";
   const template = document.querySelector("#linkCardTemplate");
 
-  for (const group of visibleGroups) {
-    const links = state.links.filter((link) => Number(link.group_id) === Number(group.id));
-    const section = document.createElement("section");
-    section.className = "nav-section";
+  for (const link of links) {
+    const card = template.content.firstElementChild.cloneNode(true);
+    card.href = link.url;
+    card.target = Number(link.open_in_new_tab) === 1 ? "_blank" : "_self";
+    card.rel = "noopener noreferrer";
+    card.title = link.description || `${link.title} · ${safeHostname(link.url)}`;
+    card.querySelector(".link-title").textContent = link.title;
+    card.querySelector(".link-description").textContent = link.description || safeHostname(link.url);
 
-    const heading = document.createElement("div");
-    heading.className = "section-heading";
-    const headingCopy = document.createElement("div");
-    const title = document.createElement("h2");
-    title.textContent = group.name;
-    headingCopy.append(title);
-    if (group.description) {
-      const description = document.createElement("p");
-      description.textContent = group.description;
-      headingCopy.append(description);
+    const groupTag = card.querySelector(".link-group-tag");
+    const group = groupMap.get(Number(link.group_id));
+    groupTag.textContent = group ? displayGroupName(group) : "";
+    groupTag.hidden = Boolean(selectedGroupId);
+
+    const icon = card.querySelector(".link-icon");
+    const iconWrap = card.querySelector(".link-icon-wrap");
+    card.querySelector(".link-icon-fallback").textContent = (link.title || "?").slice(0, 1).toUpperCase();
+    const iconUrl = faviconFor(link);
+    if (!iconUrl) {
+      iconWrap.classList.add("is-fallback");
+    } else {
+      icon.src = iconUrl;
+      icon.addEventListener("error", () => iconWrap.classList.add("is-fallback"), { once: true });
     }
-    const count = document.createElement("span");
-    count.className = "section-count";
-    count.textContent = `${links.length} 个入口`;
-    heading.append(headingCopy, count);
-
-    const grid = document.createElement("div");
-    grid.className = "link-grid";
-
-    for (const link of links) {
-      const card = template.content.firstElementChild.cloneNode(true);
-      card.href = link.url;
-      card.target = Number(link.open_in_new_tab) === 1 ? "_blank" : "_self";
-      card.rel = "noopener noreferrer";
-      card.querySelector(".link-title").textContent = link.title;
-      card.querySelector(".link-description").textContent = link.description || safeHostname(link.url);
-
-      const icon = card.querySelector(".link-icon");
-      const iconWrap = card.querySelector(".link-icon-wrap");
-      card.querySelector(".link-icon-fallback").textContent = (link.title || "?").slice(0, 1).toUpperCase();
-      const iconUrl = faviconFor(link);
-      if (!iconUrl) {
-        iconWrap.classList.add("is-fallback");
-      } else {
-        icon.src = iconUrl;
-        icon.addEventListener("error", () => iconWrap.classList.add("is-fallback"), { once: true });
-      }
-      grid.append(card);
-    }
-
-    section.append(heading, grid);
-    navigationRoot.append(section);
+    grid.append(card);
   }
+
+  stage.append(meta, grid);
+  navigationRoot.append(stage);
 }
 
 function applySettings() {
@@ -162,6 +245,7 @@ async function loadNavigation() {
     state.groups = data.groups || [];
     state.links = data.links || [];
     applySettings();
+    renderCategoryTabs();
     renderNavigation();
     updateClock();
   } catch (error) {

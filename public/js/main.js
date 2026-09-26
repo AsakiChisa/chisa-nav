@@ -33,20 +33,18 @@ const suggestionStatus = document.querySelector("#suggestionStatus");
 const themeButton = document.querySelector("#themeButton");
 let suggestionTimer = null;
 
-function applyTheme(theme) {
-  let resolved = theme;
-  if (theme === "auto") {
-    resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+function applyTheme() {
+  root.dataset.theme = "light";
+  localStorage.setItem("chisa-nav-theme", "light");
+  if (themeButton) {
+    themeButton.textContent = "☀";
+    themeButton.disabled = true;
+    themeButton.title = "当前使用浅色主题";
   }
-  root.dataset.theme = resolved;
-  localStorage.setItem("chisa-nav-theme", theme);
-  themeButton.textContent = resolved === "dark" ? "☀" : "◐";
 }
 
 function cycleTheme() {
-  const current = localStorage.getItem("chisa-nav-theme") || state.settings.default_theme || "auto";
-  const order = ["auto", "light", "dark"];
-  applyTheme(order[(order.indexOf(current) + 1) % order.length]);
+  applyTheme("light");
 }
 
 function updateClock() {
@@ -144,6 +142,60 @@ function renderCategoryTabs() {
   categoryBar.hidden = false;
 }
 
+function createDashboardLinkCard(link, group, template) {
+  const card = template.content.firstElementChild.cloneNode(true);
+  card.href = link.url;
+  card.target = Number(link.open_in_new_tab) === 1 ? "_blank" : "_self";
+  card.rel = "noopener noreferrer";
+  card.title = link.description || `${link.title} · ${safeHostname(link.url)}`;
+  card.querySelector(".link-title").textContent = link.title;
+  card.querySelector(".link-description").textContent = link.description || safeHostname(link.url);
+
+  const groupTag = card.querySelector(".link-group-tag");
+  groupTag.textContent = group ? displayGroupName(group) : "";
+  groupTag.hidden = true;
+
+  const icon = card.querySelector(".link-icon");
+  const iconWrap = card.querySelector(".link-icon-wrap");
+  card.querySelector(".link-icon-fallback").textContent = (link.title || "?").slice(0, 1).toUpperCase();
+  const iconUrl = faviconFor(link);
+  if (!iconUrl) {
+    iconWrap.classList.add("is-fallback");
+  } else {
+    icon.src = iconUrl;
+    icon.addEventListener("error", () => iconWrap.classList.add("is-fallback"), { once: true });
+  }
+  return card;
+}
+
+function renderDashboardGroup(group, links, template, { single = false } = {}) {
+  const section = document.createElement("section");
+  section.className = `dashboard-group${single ? " is-single" : ""}`;
+
+  const heading = document.createElement("div");
+  heading.className = "dashboard-group-heading";
+  const title = document.createElement("h2");
+  title.textContent = displayGroupName(group);
+  const count = document.createElement("span");
+  count.textContent = `${links.length}`;
+  heading.append(title, count);
+
+  if (group?.description) {
+    const description = document.createElement("p");
+    description.textContent = group.description;
+    heading.append(description);
+  }
+
+  const list = document.createElement("div");
+  list.className = "dashboard-link-list";
+  for (const link of links) {
+    list.append(createDashboardLinkCard(link, group, template));
+  }
+
+  section.append(heading, list);
+  return section;
+}
+
 function renderNavigation() {
   navigationRoot.innerHTML = "";
   const groups = visibleGroupsWithLinks();
@@ -155,67 +207,27 @@ function renderNavigation() {
   }
 
   resolveActiveCategory(groups);
-  const groupMap = new Map(groups.map((group) => [Number(group.id), group]));
+  const template = document.querySelector("#linkCardTemplate");
   const selectedGroupId = state.activeCategory.startsWith("group:")
     ? Number(state.activeCategory.split(":")[1])
     : null;
-  const links = selectedGroupId
-    ? state.links.filter((link) => Number(link.group_id) === selectedGroupId)
-    : state.links.filter((link) => groupMap.has(Number(link.group_id)));
 
-  const stage = document.createElement("div");
-  stage.className = "category-stage";
+  const dashboard = document.createElement("div");
+  dashboard.className = `dashboard-grid${selectedGroupId ? " is-filtered" : ""}`;
 
-  const meta = document.createElement("div");
-  meta.className = "category-meta";
   if (selectedGroupId) {
-    const group = groupMap.get(selectedGroupId);
-    const title = document.createElement("strong");
-    title.textContent = displayGroupName(group);
-    const detail = document.createElement("span");
-    detail.textContent = group?.description || `${links.length} 个入口`;
-    meta.append(title, detail);
+    const group = groups.find((item) => Number(item.id) === selectedGroupId);
+    const links = state.links.filter((link) => Number(link.group_id) === selectedGroupId);
+    if (group) dashboard.append(renderDashboardGroup(group, links, template, { single: true }));
   } else {
-    const title = document.createElement("strong");
-    title.textContent = "全部";
-    const detail = document.createElement("span");
-    detail.textContent = `${links.length} 个入口`;
-    meta.append(title, detail);
-  }
-
-  const grid = document.createElement("div");
-  grid.className = "link-grid category-grid";
-  const template = document.querySelector("#linkCardTemplate");
-
-  for (const link of links) {
-    const card = template.content.firstElementChild.cloneNode(true);
-    card.href = link.url;
-    card.target = Number(link.open_in_new_tab) === 1 ? "_blank" : "_self";
-    card.rel = "noopener noreferrer";
-    card.title = link.description || `${link.title} · ${safeHostname(link.url)}`;
-    card.querySelector(".link-title").textContent = link.title;
-    card.querySelector(".link-description").textContent = link.description || safeHostname(link.url);
-
-    const groupTag = card.querySelector(".link-group-tag");
-    const group = groupMap.get(Number(link.group_id));
-    groupTag.textContent = group ? displayGroupName(group) : "";
-    groupTag.hidden = Boolean(selectedGroupId);
-
-    const icon = card.querySelector(".link-icon");
-    const iconWrap = card.querySelector(".link-icon-wrap");
-    card.querySelector(".link-icon-fallback").textContent = (link.title || "?").slice(0, 1).toUpperCase();
-    const iconUrl = faviconFor(link);
-    if (!iconUrl) {
-      iconWrap.classList.add("is-fallback");
-    } else {
-      icon.src = iconUrl;
-      icon.addEventListener("error", () => iconWrap.classList.add("is-fallback"), { once: true });
+    for (const group of groups) {
+      const links = state.links.filter((link) => Number(link.group_id) === Number(group.id));
+      if (!links.length) continue;
+      dashboard.append(renderDashboardGroup(group, links, template));
     }
-    grid.append(card);
   }
 
-  stage.append(meta, grid);
-  navigationRoot.append(stage);
+  navigationRoot.append(dashboard);
 }
 
 function applySettings() {
@@ -233,7 +245,7 @@ function applySettings() {
 
   const savedEngine = localStorage.getItem("chisa-nav-search-engine");
   searchEngine.value = savedEngine && searchEngines[savedEngine] ? savedEngine : settings.default_search_engine || "google";
-  applyTheme(localStorage.getItem("chisa-nav-theme") || settings.default_theme || "auto");
+  applyTheme("light");
 }
 
 async function loadNavigation() {
@@ -567,7 +579,7 @@ searchEngine.addEventListener("change", () => {
   if (searchInput.value.trim()) scheduleSuggestions();
 });
 
-themeButton.addEventListener("click", cycleTheme);
+themeButton?.addEventListener("click", cycleTheme);
 
 document.addEventListener("pointerdown", (event) => {
   if (!searchInputWrap.contains(event.target) && event.target !== searchEngine) closeSuggestions();
@@ -580,9 +592,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-  if ((localStorage.getItem("chisa-nav-theme") || state.settings.default_theme || "auto") === "auto") applyTheme("auto");
-});
+
 
 setInterval(updateClock, 30_000);
 loadNavigation();

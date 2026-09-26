@@ -33,18 +33,31 @@ const suggestionStatus = document.querySelector("#suggestionStatus");
 const themeButton = document.querySelector("#themeButton");
 let suggestionTimer = null;
 
-function applyTheme() {
-  root.dataset.theme = "light";
-  localStorage.setItem("chisa-nav-theme", "light");
+function applyTheme(theme) {
+  const requested = ["auto", "light", "dark"].includes(theme) ? theme : "auto";
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const resolved = requested === "auto" ? (prefersDark ? "dark" : "light") : requested;
+
+  root.dataset.theme = resolved;
+  localStorage.setItem("chisa-nav-theme", requested);
+
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) themeMeta.setAttribute("content", resolved === "dark" ? "#171b24" : "#f4f6fa");
+
   if (themeButton) {
-    themeButton.textContent = "☀";
-    themeButton.disabled = true;
-    themeButton.title = "当前使用浅色主题";
+    themeButton.disabled = false;
+    themeButton.textContent = resolved === "dark" ? "☀" : "◐";
+    const modeText = requested === "auto" ? `跟随系统（当前${resolved === "dark" ? "深色" : "浅色"}）` : (resolved === "dark" ? "深色" : "浅色");
+    themeButton.title = `${modeText}，点击切换主题`;
+    themeButton.setAttribute("aria-label", `${modeText}，点击切换主题`);
   }
 }
 
 function cycleTheme() {
-  applyTheme("light");
+  const current = localStorage.getItem("chisa-nav-theme") || state.settings.default_theme || "auto";
+  const order = ["auto", "light", "dark"];
+  const index = order.indexOf(current);
+  applyTheme(order[(index < 0 ? 0 : index + 1) % order.length]);
 }
 
 function updateClock() {
@@ -245,7 +258,7 @@ function applySettings() {
 
   const savedEngine = localStorage.getItem("chisa-nav-search-engine");
   searchEngine.value = savedEngine && searchEngines[savedEngine] ? savedEngine : settings.default_search_engine || "google";
-  applyTheme("light");
+  applyTheme(localStorage.getItem("chisa-nav-theme") || settings.default_theme || "auto");
 }
 
 async function loadNavigation() {
@@ -592,7 +605,10 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  const current = localStorage.getItem("chisa-nav-theme") || state.settings.default_theme || "auto";
+  if (current === "auto") applyTheme("auto");
+});
 
 setInterval(updateClock, 30_000);
 loadNavigation();

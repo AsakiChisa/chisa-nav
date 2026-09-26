@@ -248,8 +248,11 @@ function applySettings() {
   document.title = settings.site_title || "浅咲导航";
   document.querySelector("#siteSubtitle").textContent = settings.site_subtitle || "收藏常用网站，快速抵达";
   document.querySelector("#siteTitleFooter").textContent = settings.site_title || "浅咲导航";
-  root.style.setProperty("--card-opacity", String(settings.card_opacity ?? 0.78));
-  root.style.setProperty("--card-blur", `${Number(settings.card_blur ?? 18)}px`);
+  const opacity = Math.min(1, Math.max(0.2, Number(settings.card_opacity ?? 0.78)));
+  const blur = Math.min(40, Math.max(0, Number(settings.card_blur ?? 18)));
+  root.style.setProperty("--card-opacity", String(opacity));
+  root.style.setProperty("--card-blur", `${blur}px`);
+  root.style.setProperty("--background-blur", `${blur}px`);
   if (settings.background_url) {
     root.style.setProperty("--custom-background", `url("${String(settings.background_url).replaceAll('"', '\\"')}")`);
   } else {

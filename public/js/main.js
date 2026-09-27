@@ -522,22 +522,81 @@ function activateSuggestion(index) {
   performSearch(item.text);
 }
 
+function mapOnlineSuggestionStrings(values, detail = "热门联想") {
+  return values
+    .filter((item) => typeof item === "string" && item.trim())
+    .slice(0, MAX_SUGGESTIONS)
+    .map((text) => ({ type: "online", text: text.trim(), detail }));
+}
+
+function fetchGoogleSuggestionsJsonp(query, requestId) {
+  return new Promise((resolve) => {
+    const callbackName = `__chisaGoogleSuggest_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    let settled = false;
+
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      script.remove();
+      try {
+        delete window[callbackName];
+      } catch {
+        window[callbackName] = undefined;
+      }
+    };
+
+    const finish = (values) => {
+      if (settled) return;
+      const result = requestId === state.suggestionRequestId
+        ? mapOnlineSuggestionStrings(values, "Google 联想")
+        : [];
+      cleanup();
+      resolve(result);
+    };
+
+    window[callbackName] = (payload) => {
+      const values = Array.isArray(payload) && Array.isArray(payload[1]) ? payload[1] : [];
+      finish(values);
+    };
+
+    const params = new URLSearchParams({
+      client: "firefox",
+      hl: "zh-CN",
+      q: query,
+      callback: callbackName,
+    });
+    script.src = `https://suggestqueries.google.com/complete/search?${params}`;
+    script.async = true;
+    script.referrerPolicy = "no-referrer";
+    script.addEventListener("error", () => finish([]), { once: true });
+    document.head.append(script);
+
+    const timer = window.setTimeout(() => finish([]), 3200);
+  });
+}
+
 async function fetchOnlineSuggestions(query, requestId) {
   try {
     const params = new URLSearchParams({ q: query, engine: searchEngine.value });
     const response = await fetch(`/api/suggest?${params}`, {
       headers: { Accept: "application/json" },
+      cache: "no-store",
     });
     const data = await response.json();
     if (requestId !== state.suggestionRequestId) return [];
-    if (!response.ok || !data.ok || !Array.isArray(data.suggestions)) return [];
-    return data.suggestions
-      .filter((item) => typeof item === "string" && item.trim())
-      .slice(0, MAX_SUGGESTIONS)
-      .map((text) => ({ type: "online", text: text.trim(), detail: "热门联想" }));
+    if (response.ok && data.ok && Array.isArray(data.suggestions) && data.suggestions.length) {
+      return mapOnlineSuggestionStrings(data.suggestions);
+    }
   } catch {
-    return [];
+    // 同源 Worker 联想接口不可用时，Google 模式继续使用浏览器 JSONP 兜底。
   }
+
+  if (searchEngine.value === "google") {
+    return fetchGoogleSuggestionsJsonp(query, requestId);
+  }
+  return [];
 }
 
 async function updateSuggestions() {

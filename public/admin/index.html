@@ -154,19 +154,19 @@
 
   <dialog id="groupDialog" class="modal">
     <form id="groupForm" method="dialog">
-      <div class="modal-heading"><div><p>GROUP</p><h2 id="groupDialogTitle">新增分组</h2></div><button class="close-button" value="cancel" aria-label="关闭">×</button></div>
+      <div class="modal-heading"><div><p>GROUP</p><h2 id="groupDialogTitle">新增分组</h2></div><button class="close-button" type="submit" value="cancel" formnovalidate aria-label="关闭">×</button></div>
       <input name="id" type="hidden">
       <label><span>分组名称</span><input name="name" required maxlength="50"></label>
       <label><span>分组说明</span><textarea name="description" maxlength="200" rows="3"></textarea></label>
       <label><span>图标标识</span><input name="icon" maxlength="100" placeholder="例如 star、server"></label>
       <label class="checkbox-label"><input name="isVisible" type="checkbox" checked><span>在导航首页显示</span></label>
-      <div class="modal-actions"><button class="secondary-button" value="cancel">取消</button><button class="primary-button" id="saveGroupButton" type="submit" value="default">保存</button></div>
+      <div class="modal-actions"><button class="secondary-button" type="submit" value="cancel" formnovalidate>取消</button><button class="primary-button" id="saveGroupButton" type="submit" value="default">保存</button></div>
     </form>
   </dialog>
 
   <dialog id="linkDialog" class="modal wide">
     <form id="linkForm" method="dialog">
-      <div class="modal-heading"><div><p>LINK</p><h2 id="linkDialogTitle">新增网址</h2></div><button class="close-button" value="cancel" aria-label="关闭">×</button></div>
+      <div class="modal-heading"><div><p>LINK</p><h2 id="linkDialogTitle">新增网址</h2></div><button class="close-button" type="submit" value="cancel" formnovalidate aria-label="关闭">×</button></div>
       <input name="id" type="hidden">
       <div class="form-grid two-columns modal-grid">
         <label><span>网站名称</span><input name="title" required maxlength="80"></label>
@@ -177,16 +177,16 @@
         <label class="checkbox-label"><input name="openInNewTab" type="checkbox" checked><span>在新标签页打开</span></label>
         <label class="checkbox-label"><input name="isVisible" type="checkbox" checked><span>在导航首页显示</span></label>
       </div>
-      <div class="modal-actions"><button class="secondary-button" value="cancel">取消</button><button class="primary-button" type="submit" value="default">保存</button></div>
+      <div class="modal-actions"><button class="secondary-button" type="submit" value="cancel" formnovalidate>取消</button><button class="primary-button" type="submit" value="default">保存</button></div>
     </form>
   </dialog>
 
   <dialog id="whitelistDialog" class="modal">
     <form id="whitelistForm" method="dialog">
-      <div class="modal-heading"><div><p>SECURITY</p><h2>添加 IP 白名单</h2></div><button class="close-button" value="cancel" aria-label="关闭">×</button></div>
+      <div class="modal-heading"><div><p>SECURITY</p><h2>添加 IP 白名单</h2></div><button class="close-button" type="submit" value="cancel" formnovalidate aria-label="关闭">×</button></div>
       <label><span>IP 地址</span><input name="ipAddress" required maxlength="100" placeholder="例如 203.0.113.10"></label>
       <label><span>备注</span><input name="note" maxlength="200" placeholder="例如 家里电脑"></label>
-      <div class="modal-actions"><button class="secondary-button" value="cancel">取消</button><button class="primary-button" type="submit" value="default">添加</button></div>
+      <div class="modal-actions"><button class="secondary-button" type="submit" value="cancel" formnovalidate>取消</button><button class="primary-button" type="submit" value="default">添加</button></div>
     </form>
   </dialog>
 
